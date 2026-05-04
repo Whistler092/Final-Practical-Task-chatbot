@@ -1,0 +1,10 @@
+jupyter
+jupyterlab
+openai
+python-dotenv
+langchain
+langchain-openai
+mcp[cli]
+pandas
+uv
+create-mcp-server
