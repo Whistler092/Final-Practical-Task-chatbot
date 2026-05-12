@@ -13,15 +13,18 @@ def render_chat_history() -> None:
 
 def render_sidebar() -> None:
     st.sidebar.header("Configuration")
-    st.sidebar.write("This app uses Azure OpenAI and two MCP servers")
+    st.sidebar.write("This app uses Azure OpenAI and a custom MCP server")
     st.sidebar.code(
         "\n".join(
             [
                 "LLM Model:",
-                "- gpt-5-nano",
-                "MCP servers:",
+                "- gpt-5-nano (Azure OpenAI)",
+                "",
+                "MCP Server:",
+                "- disasters-server (custom FastMCP)",
                 "- ALL NATURAL DISASTERS 1900-2021 / EOSDIS",
-                "https://www.kaggle.com/datasets/brsdincer/all-natural-disasters-19002021-eosdis"
+                "- kaggle.com/datasets/brsdincer/",
+                "  all-natural-disasters-19002021-eosdis",
             ]
         )
     )

@@ -1,7 +1,7 @@
 """
-Streamlit entrypoint: news and weather agent backed by MCP tools and Azure OpenAI.
+Streamlit entrypoint: natural disasters agent backed by a custom MCP server and Azure OpenAI.
 
-Weather + keyless news use Open-Meteo MCP and Google News RSS MCP (see mcp_stack_provider.py).
+Uses the disasters-server MCP for querying historical disaster data (see mcp_stack_provider.py).
 """
 
 from __future__ import annotations
