@@ -7,7 +7,7 @@ import logging
 from typing import Any, Callable, List, Optional, cast
 
 import streamlit as st
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessageChunk, BaseMessage
 
 from agent_messages import (
     describe_message_for_status,
@@ -110,6 +110,8 @@ async def stream_agent_to_completion(
 
         elif mode == "messages":
             msg_chunk = unwrap_messages_event_payload(event.get("data"))
+            if not isinstance(msg_chunk, AIMessageChunk):
+                continue
             delta = message_chunk_to_text_delta(msg_chunk)
             if delta:
                 streamed_chars += delta

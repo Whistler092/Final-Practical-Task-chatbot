@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, List, Optional, cast
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -18,6 +19,24 @@ def tool_call_names(tool_calls: List[Any]) -> List[str]:
     return out
 
 
+def _count_records(content: Any) -> Optional[int]:
+    """Try to count records in a tool result."""
+    try:
+        if isinstance(content, str):
+            data = json.loads(content)
+        else:
+            data = content
+        if isinstance(data, list):
+            return len(data)
+        if isinstance(data, dict) and "results" in data:
+            results = data["results"]
+            if isinstance(results, list):
+                return len(results)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return None
+
+
 def describe_message_for_status(message: BaseMessage) -> Optional[str]:
     """
     Build a short status line when new messages appear during streaming.
@@ -25,6 +44,9 @@ def describe_message_for_status(message: BaseMessage) -> Optional[str]:
     Used to show tool calls and tool completions in the Streamlit status box.
     """
     if isinstance(message, ToolMessage):
+        count = _count_records(message.content)
+        if count is not None:
+            return f"Tool finished: `{message.name}` — {count} records returned"
         return f"Tool finished: `{message.name}`"
     if isinstance(message, AIMessage) and message.tool_calls:
         return f"Calling tools: {', '.join(tool_call_names(message.tool_calls))}"
