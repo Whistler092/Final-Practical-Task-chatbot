@@ -1,38 +1,31 @@
-import asyncio
 import json
-
-from mcp.server.models import InitializationOptions
-import mcp.types as types
-from mcp.server import NotificationOptions, Server
-from pydantic import AnyUrl
-import mcp.server.stdio
-
-# Load the csv with pandas
 import os
+from pathlib import Path
+
 import pandas as pd
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("natural-disasters")
 
-# Load files
-#    Final-Practical-Task-chatbot\disasters-server\data\1900_2021_DISASTERS.xlsx - emdat data.csv
-#    Final-Practical-Task-chatbot\disasters-server\data\1970-2021_DISASTERS.xlsx - emdat data.csv
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
-CSV_PATH_1900_2021_DISASTERS = os.environ.get("DISASTERS_CSV_PATH", "..\\disasters-server\\data\\1900_2021_DISASTERS.xlsx - emdat data.csv")
-CSV_PATH_1970_2021_DISASTERS = os.environ.get("DISASTERS_CSV_PATH", "..\\disasters-server\\data\\1970_2021_DISASTERS.xlsx - emdat data.csv")
+CSV_PATH_1900 = os.environ.get(
+    "DISASTERS_CSV_1900",
+    str(_DATA_DIR / "1900_2021_DISASTERS.xlsx - emdat data.csv"),
+)
+CSV_PATH_1970 = os.environ.get(
+    "DISASTERS_CSV_1970",
+    str(_DATA_DIR / "1970_2021_DISASTERS.xlsx - emdat data.csv"),
+)
 
-df_disasters_1900_2021 = pd.read_csv(CSV_PATH_1900_2021_DISASTERS)
-df_disasters_1970_2021 = pd.read_csv(CSV_PATH_1970_2021_DISASTERS)
-print(f"Disasters data loaded: {df_disasters_1970_2021.shape[0]} rows, {df_disasters_1970_2021.shape[1]} columns")
+df_disasters_1900 = pd.read_csv(CSV_PATH_1900)
+df_disasters_1970 = pd.read_csv(CSV_PATH_1970)
+print(f"Loaded 1900-2021: {df_disasters_1900.shape[0]} rows, {df_disasters_1900.shape[1]} columns")
+print(f"Loaded 1970-2021: {df_disasters_1970.shape[0]} rows, {df_disasters_1970.shape[1]} columns")
 
-# unify both datasets into a single DataFrame
-df_disasters = pd.concat([df_disasters_1900_2021, df_disasters_1970_2021], ignore_index=True)
+df_disasters = pd.concat([df_disasters_1900, df_disasters_1970], ignore_index=True)
 print(f"Combined disasters data: {df_disasters.shape[0]} rows, {df_disasters.shape[1]} columns")
 
-# Store notes as a simple key-value dict to demonstrate state management
-notes: dict[str, str] = {}
-
-server = Server("disasters-server")
 
 @mcp.tool()
 async def query_disasters(
@@ -43,12 +36,11 @@ async def query_disasters(
 ) -> str:
     """
     Query the natural disasters CSV dataset.
- 
 
-    Args: 
+    Args:
         country: Filter by country name (case-insensitive). E.g. "Argentina", "Australia". If None, no country filter is applied.
         year: Filter by year (e.g. 1970). If None, no year filter is applied.
-        disaster_type: Filter by disaster type (case-insensitive, e.g. "Flood", "Storm", "Earthquake"). If None, no disaster type filter is applied.
+        disaster_type: Filter by disaster type (case-insensitive). Supported types: "Animal accident", "Drought", "Earthquake", "Epidemic", "Extreme temperature", "Flood", "Fog", "Glacial lake outburst", "Impact", "Insect infestation", "Landslide", "Mass movement (dry)", "Storm", "Volcanic activity", "Wildfire". If None, no disaster type filter is applied.
         limit: Maximum number of results to return
 
     Expected output: A JSON string containing a list of disasters matching the criteria, with key details for each disaster. If no disasters match, a message indicating no results found. If the dataset is not loaded, an error message is returned.
@@ -88,7 +80,7 @@ async def query_disasters(
 
     if df_disasters is None or df_disasters.empty:
         return "Disasters data not loaded"
-    
+
     df = df_disasters.copy()
 
     if country:
@@ -162,141 +154,5 @@ async def query_disasters(
     return json.dumps({"total": len(records), "disasters": records}, default=str)
 
 
-@server.list_resources()
-async def handle_list_resources() -> list[types.Resource]:
-    """
-    List available note resources.
-    Each note is exposed as a resource with a custom note:// URI scheme.
-    """
-    return [
-        types.Resource(
-            uri=AnyUrl(f"note://internal/{name}"),
-            name=f"Note: {name}",
-            description=f"A simple note named {name}",
-            mimeType="text/plain",
-        )
-        for name in notes
-    ]
-
-@server.read_resource()
-async def handle_read_resource(uri: AnyUrl) -> str:
-    """
-    Read a specific note's content by its URI.
-    The note name is extracted from the URI host component.
-    """
-    if uri.scheme != "note":
-        raise ValueError(f"Unsupported URI scheme: {uri.scheme}")
-
-    name = uri.path
-    if name is not None:
-        name = name.lstrip("/")
-        return notes[name]
-    raise ValueError(f"Note not found: {name}")
-
-@server.list_prompts()
-async def handle_list_prompts() -> list[types.Prompt]:
-    """
-    List available prompts.
-    Each prompt can have optional arguments to customize its behavior.
-    """
-    return [
-        types.Prompt(
-            name="summarize-notes",
-            description="Creates a summary of all notes",
-            arguments=[
-                types.PromptArgument(
-                    name="style",
-                    description="Style of the summary (brief/detailed)",
-                    required=False,
-                )
-            ],
-        )
-    ]
-
-@server.get_prompt()
-async def handle_get_prompt(
-    name: str, arguments: dict[str, str] | None
-) -> types.GetPromptResult:
-    """
-    Generate a prompt by combining arguments with server state.
-    The prompt includes all current notes and can be customized via arguments.
-    """
-    if name != "summarize-notes":
-        raise ValueError(f"Unknown prompt: {name}")
-
-    style = (arguments or {}).get("style", "brief")
-    detail_prompt = " Give extensive details." if style == "detailed" else ""
-
-    return types.GetPromptResult(
-        description="Summarize the current notes",
-        messages=[
-            types.PromptMessage(
-                role="user",
-                content=types.TextContent(
-                    type="text",
-                    text=f"Here are the current notes to summarize:{detail_prompt}\n\n"
-                    + "\n".join(
-                        f"- {name}: {content}"
-                        for name, content in notes.items()
-                    ),
-                ),
-            )
-        ],
-    )
-
-@server.list_tools()
-async def handle_list_tools() -> list[types.Tool]:
-    """
-    List available tools.
-    Each tool specifies its arguments using JSON Schema validation.
-    """
-    return [
-        types.Tool(
-            name="add-note",
-            description="Add a new note",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "content": {"type": "string"},
-                },
-                "required": ["name", "content"],
-            },
-        )
-    ]
-
-@server.call_tool()
-async def handle_call_tool(
-    name: str, arguments: dict | None
-) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
-    """
-    Handle tool execution requests.
-    Tools can modify server state and notify clients of changes.
-    """
-    if name != "add-note":
-        raise ValueError(f"Unknown tool: {name}")
-
-    if not arguments:
-        raise ValueError("Missing arguments")
-
-    note_name = arguments.get("name")
-    content = arguments.get("content")
-
-    if not note_name or not content:
-        raise ValueError("Missing name or content")
-
-    # Update server state
-    notes[note_name] = content
-
-    # Notify clients that resources have changed
-    await server.request_context.session.send_resource_list_changed()
-
-    return [
-        types.TextContent(
-            type="text",
-            text=f"Added note '{note_name}' with content: {content}",
-        )
-    ]
-
-async def main():
-    await mcp.run_sse_async()
+def main():
+    mcp.run()
